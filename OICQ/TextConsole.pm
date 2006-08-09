@@ -1,6 +1,6 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.27 2006/08/09 03:26:10 tans Exp $
+# $Id: TextConsole.pm,v 1.28 2006/08/09 05:35:00 tans Exp $
 
 # Copyright (c) 2003, 2004, 2005, 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -380,7 +380,8 @@ sub ui_recv_friend_status {
 
 sub ui_recv_service_msg {
 	my ($self, $event) = @_;
-	$self->info("Received service message from $event->{SrcId}:\n$event->{Comment}\n");
+	$self->info("Received service message from $event->{SrcId}:\n$event->{Comment}:",
+			defined($event->{Mesg}) ? $event->{Mesg} : "", "\n");
 }
 
 sub ui_do_group {
@@ -403,7 +404,7 @@ sub ui_add_contact_1 {
 
 sub ui_add_contact_2 {
 	my ($self, $event) = @_;
-	$self->info("$event->{Comment}\n");
+	$self->info("Server reponse to add_contact_2: $event->{Data}\n");
 }
 
 sub ui_del_contact {
