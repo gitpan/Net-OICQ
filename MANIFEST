@@ -1,0 +1,11 @@
+Changes
+Copyright
+Makefile.PL
+MANIFEST
+OICQ.pm
+OICQ/ClientEvent.pm
+OICQ/TextConsole.pm
+OICQ/Event.pm
+OICQ/ServerEvent.pm
+README
+test.pl
