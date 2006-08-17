@@ -1,8 +1,8 @@
 package Net::OICQ::ServerEvent;
 
-# $Id: ServerEvent.pm,v 1.28 2006/08/09 05:35:00 tans Exp $
+# $Id: ServerEvent.pm,v 1.31 2006/08/17 00:30:14 tans Exp $
 
-# Copyright (c) 2003-2006 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -135,20 +135,26 @@ sub recv_msg {
 		$self->{Subtype} = $subtype;
 		$self->{MsgSeq} = $seq;
 		$self->{MsgTime} = $time;
-		if ($subtype == 0x81 or $subtype == 0x85) {
-			$mesg = substr($plain, 54);
-			$self->{H54_end} = unpack('H*', $mesg);
-			if ($mesg =~ /\x00\x00\x08$dstid\x00\x00/s) {
-				$mesg =~ s/\W/./g;
-			} elsif (substr($mesg, 0 , 27) eq pack('H*', '003f00000001000000000000000000000000000000650067000000')) {
-				if ($mesg =~ / \x1f(.+)\x1f(\d+) \xd7\xd6\xbd\xda$/s) {
-					$self->{FileName} = $1;
-					$self->{FileSize} = $2;
-					$self->{FileIP} = $oicq->show_address(substr($mesg, 34, 4));
-				} else {
-					$self->{FileCancelled} = 1;
-				}
+		if ($subtype == 0x81) { # Request for file transfer, voice or video
+			$mesg = unpack('H*', substr($plain, 54));
+			$self->{RequestId} = unpack('H*', substr($plain, 86, 2));
+			$self->{RequestIP} = $oicq->show_address(substr($plain, 88, 4));
+			if ($plain =~ /([^\x1f]+?)\x1f(\d+) \xd7\xd6\xbd\xda$/s) {
+				$self->{FileName} = $1;
+				$self->{FileSize} = $2;
+			} elsif ($plain =~ /(\xd3\xef\xd2\xf4\xc1\xc4\xcc\xec)/s) {
+				$self->{VoiceChat} = $1;
+			} elsif ($plain =~ /(\xd3\xef\xd2\xf4\xca\xd3\xc6\xb5\xc1\xc4\xcc\xec)/s) {
+				$self->{VideoChat} = $1;
+			} else {
+				$self->{Ignore} = 1;
 			}
+		} elsif ($subtype == 0x85) { # Cancel
+			$mesg = unpack('H*', substr($plain, 54));
+			$self->{RequestCancelled} = unpack('H*', substr($plain, 84, 2));
+		} elsif ($subtype == 0x35) {
+			$self->{Ignore} = 1;
+			$mesg = unpack('H*', substr($plain, 54));
 		} else {
 			$self->{H54_x} = unpack("H*", substr($plain, 54, $subtype));
 			$mesg = substr($plain, 54 + $subtype);
@@ -180,7 +186,6 @@ sub recv_msg {
 			$tail =~ s/.$//;
 			$self->{FontName} = substr($tail, 9);
 		}
-		$self->{Mesg} = $mesg;
 		if ($oicq->{LogChat}) {
 			my $grpid = exists($self->{GrpId}) ? "(Group $self->{GrpId})" : "";
 			my $time = substr(localtime($self->{MsgTime}), 4, 16);
@@ -192,6 +197,16 @@ sub recv_msg {
 	} elsif ($msg_type == 0x30) {
 		$self->{MsgHeader} = unpack("H*", substr($plain, 20, 1));
 		$mesg = substr($plain, 21);
+	} elsif ($msg_type == 0x34) {  # Backdrop
+		$self->{MsgTime} = unpack('N', substr($plain, -4));
+		if (length($plain) <= 30) {
+			$self->{BackdropCancelled} = 1;
+			$mesg = "";
+		} else {
+			my $len = ord(substr($plain, 27, 1));
+			$self->{Backdrop} = substr($plain, 28, $len);
+			$mesg = substr($plain, 20);
+		}
 	} elsif ($msg_type == 0x41) {
 		$self->{MsgHeader} = unpack("H*", substr($plain, 20, 9));
 		$mesg = substr($plain, 29);
@@ -199,34 +214,13 @@ sub recv_msg {
 		$self->{MsgHeader} = unpack("H*", substr($plain, 20, 7));
 		$mesg = substr($plain, 27);
 	} else {
-		$mesg = $oicq->hexdump(substr($plain, 20));
-		$oicq->log_t("Unknown recv_msg type $msg_type from $srcid, $srcaddr:\n$mesg");
+		$mesg = unpack('H*', substr($plain, 20));
+		$oicq->log_t("Unknown message type $msg_type from $srcid, $srcaddr:\n$mesg");
 	}
 	$self->{Mesg} = $mesg;
 
 	if (defined $oicq->{Socket} and defined $mesg) {
 		$oicq->ack_msg($self->seq, $plain);
-		# No chatbot for group/server message
-		return 1 if exists($self->{GrpId}) or !exists($self->{MsgTime});
-		# First check if we have a chatbot specially for the sender
-		my $chatbot = $oicq->{Info}->{$srcid}->{ChatBot};
-		# If not, use the global chatbot for everyone
-		$chatbot = $oicq->{ChatBot} unless defined $chatbot;
-		# Chatbot may be a reference to sub or a perl script file
-		if (defined $chatbot) {
-			if (ref($chatbot) eq 'CODE') {
-				eval { $chatbot->($oicq, $self) };
-			} elsif (-f $chatbot) {
-				eval { require $chatbot; on_message($oicq, $self) };
-			} else {
-				return 1;
-			}
-			if ($@) {
-				$oicq->log_t("Chatbot error: $@");
-				$self->{BotError} = $@;
-				return;
-			}
-		}
 	}
 	return 1;
 }
@@ -273,10 +267,10 @@ sub recv_service_msg {
 		$comment = "$srcid accepted $myid";
 	} elsif ($code eq "04") {
 		$comment = "$srcid rejected $myid";
-	} elsif ($srcid eq '10000') {
-		$comment = "Garbage from $srcid";
+	} elsif ($srcid == 10000) {
+		$comment = "garbage from $srcid";
 	} else {
-		$comment = "Unknown";
+		$comment = "unknown";
 	}
 	$self->{Comment} = $comment;
 	$oicq->log_t("$comment:\n$mesg");
@@ -443,6 +437,12 @@ sub do_group {
 		$self->{GrpName}  = $gname;
 		$self->{GrpNotice} = $gnotice;
 		$self->{GrpDesc}  = $gdesc;
+		return 1;
+	}
+	if ($sub_cmd eq '0b') { # online group members
+		$self->{GrpIntId} = unpack('N', substr($plain, 2, 4));
+		my @online_members = length($plain) >= 11 ? unpack('N*', substr($plain, 7)) : ();
+		$self->{OnlineMembers} = \@online_members;
 		return 1;
 	}
 	$self->{Unknown} = unpack("H*", substr($plain, 2));

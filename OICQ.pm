@@ -1,6 +1,6 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.51 2006/08/09 02:38:06 tans Exp $
+# $Id: OICQ.pm,v 1.55 2006/08/15 01:52:40 tans Exp $
 
 # Copyright (c) 2002 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -21,7 +21,7 @@ eval "no encoding; use bytes;" if $] >= 5.008;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.0';
+our $VERSION = '1.1';
 
 #################### Begin OICQ protocol data ######################
 
@@ -289,7 +289,7 @@ sub build_login_packet {
 		pack('H*', '09f9cce1f7e8502203cd7731deabfcda') .
 		pack('H*', '01') . $ConnectMode{$self->{ConnectMode}} .
 		pack('H*', '2447087cb1d3404cbda9037f36689e39') .
-		substr($server_response, 10, -1) .
+		substr($server_response, 8, -1) .
 		pack('H*', '0140011032a09700104fac17133afc7e8cfd1bd97d2613adc2') . 
 		(pack('H*', '00')x297);
 	my $packet = $PacketHead . $CmdCode{'login'} . pack('n', $self->{Seq}) .
@@ -471,7 +471,7 @@ sub get_servers {
 	if ($type =~ /udp/i) {
 		map {'sz'. $_ . '.' . $SERVER_DOMAIN} (2 .. 9, '');
 	} else {
-		map {'tcpconn' . $_ . '.' . $SERVER_DOMAIN} (4, 5, 6, 2, 3, '');
+		map {'tcpconn' . $_ . '.' . $SERVER_DOMAIN} (6, 5, 4, 3, 2, '');
 	}
 }
 
@@ -607,11 +607,18 @@ sub login {
 				print " token not received.\n";
 				next SVR;
 			}
-			if (length($resp) != 36) {
-				print "Unexpected server response to login token:\n", unpack('H*', $resp), "\n";
+			my $token;
+			foreach my $r ($self->get_data($resp)) {
+				if (length($r) == 34 and substr($r, 3, 2) eq $CmdCode{login_request}) {
+					$token = $r;
+					last;
+				}
+			}
+			if (!defined($token)) {
+				print "unexpected server response to login request:\n", unpack('H*', $resp), "\n";
 				next SVR;
 			}
-			$login_packet = $self->build_login_packet($resp);
+			$login_packet = $self->build_login_packet($token);
 		}
 		$socket->send($login_packet);
 		print "logging in...";
@@ -663,7 +670,8 @@ sub login {
 sub decrypt_login_response {
 	my ($self, $crypt) = @_;
 	my $plain;
-	foreach my $key (qw(PWKey RandKey)) {
+	my @keys = length($crypt) == 24 ? qw(RandKey PWKey) : qw(PWKey RandKey);
+	foreach my $key (@keys) {
 		eval { $plain = decrypt("", $crypt, $self->{$key}) };
 		return $plain if defined $plain;
 		$self->log_t($@) if $@ && $self->{Debug};
@@ -795,17 +803,49 @@ sub send_msg {
 	use bytes;
 	my $nickname = $self->get_nickname($dstid);
 	if ($dstid =~ /^20/ and $nickname eq "\xc8\xba") {
+		# Group message
 		return $self->send_group_msg($dstid, $msg);
 	}
 	$self->log_t("Sent message to $dstid:\n", $msg) if $self->{LogChat};
 	my $dstid_ = pack('N', $dstid);
-	my $data = $self->{_Id} .  $dstid_ . $CLIENT_VER . $self->{_Id} . $dstid_ .
-			Digest::MD5::md5($dstid_ . $self->{Key}) .
-			"\0\x0b" .
-			pack('n', $self->{Seq}) .  pack('N', time) .
+	my $head = $self->{_Id} . $dstid_ . $CLIENT_VER . $self->{_Id} . $dstid_ .
+			Digest::MD5::md5($dstid_ . $self->{Key}) . "\0\x0b";
+	my @trunks = $self->split_gb_msg($msg);
+	my $last_trunk = pop(@trunks);
+	my $msg_seq = 0x57 + rand(0xa8);
+	my $time = pack('N', time);
+	foreach my $trunk (@trunks) {
+		my $data = $head . pack('n', ++$msg_seq) . $time .
+			"\0\0\0\0\0\1\1\0" . chr(rand(0xfd)) . "\0\1" . $trunk;
+		$self->send2svr('send_msg', $data);
+		sleep(1);
+	}
+	my $data = $head . pack('n', ++$msg_seq) . $time .
 			"\0\0\0\0\0\1\1\0" . chr(rand(0xfd)) . "\0\1" .
-			$msg . $self->msg_tail;
+			$last_trunk . $self->msg_tail;
 	$self->send2svr('send_msg', $data);
+}
+
+# Server will not send message longer than 601 bytes
+
+sub split_gb_msg {
+	my ($self, $msg) = @_;
+	my $len = length($msg);
+	my $max_len = 601;
+	return ($msg) if $len <= $max_len;
+	my $msg0 = substr($msg, 0, $max_len);
+	# here is my idea of splitting a long messages while avoiding breaking up
+	# any GB character
+	# First, count the non GB characters in the first 601 characters
+	my $non_gb_count = $msg0 =~ tr/\x00-\xa0/\x00-\xa0/;
+	if ($non_gb_count % 2) {
+		# if there are an odd number of non GB characters,
+		# it's ok to break at position 601
+		return ($msg0, $self->split_gb_msg(substr($msg, $max_len)));
+	} else {
+		$max_len--;
+		return (substr($msg, 0, $max_len), $self->split_gb_msg(substr($msg, $max_len)));
+	}
 }
 
 sub ack_msg {
@@ -864,9 +904,17 @@ sub do_group {
 
 sub send_group_msg {
 	my ($self, $group_id, @msg) = @_;
-	$self->log_t("Sent message to Group $group_id:\n", "@msg") if $self->{LogChat};
-	my $tail = $self->msg_tail;
-	my $data = "\0\1\1\0\x39\xe8\0\0\0\0@msg$tail";
+	my $mesg = "@msg";
+	$self->log_t("Sent message to Group $group_id:\n", $mesg) if $self->{LogChat};
+	my @trunks = $self->split_gb_msg($mesg);
+	my $last_trunk = pop(@trunks);
+	foreach my $trunk (@trunks) {
+		my $data = "\0\1\1\0\x39\xe8\0\0\0\0$trunk";
+		$data = pack('n', length($data)) . $data;
+		$self->do_group('send_msg', $group_id, $data);
+		sleep(1);
+	}
+	my $data = "\0\1\1\0\x39\xe8\0\0\0\0$last_trunk" . $self->msg_tail;
 	$data = pack('n', length($data)) . $data;
 	$self->do_group('send_msg', $group_id, $data);
 }
@@ -901,7 +949,7 @@ __END__
 
 =head1 NAME
 
-Net::OICQ - Perl interface to an OICQ server
+Net::OICQ - Perl extension for QQ instant messaging protocol
 
 =head1 SYNOPSIS
 
@@ -917,13 +965,69 @@ Net::OICQ - Perl interface to an OICQ server
 
 =head1 DESCRIPTION
 
-=head2 EXPORT
+This module implements an object-oriented interface to QQ instant messaging protocol.
+It requires two Perl modules, Digest::MD5 and Crypt::OICQ.  Net::OICQ class provides
+methods to connect to a QQ server, and send commands to other QQ users via the server.
+
+Net::OICQ::ServerEvent class provides methods to parse messages received from the server.
+
+Net::OICQ::ClientEvent class provides methods to process messages sent from a client.
+
+Net::OICQ::TextConsole class is an example of using the above classes for a command-line
+interface.
+
+=head1 CLASSES
+
+=head2 Net::OICQ
+
+Constructor:
+
+	$oicq = new Net::OICQ;
+
+Methods:
+
+	$oicq->login($qq_id, $qq_passwd, $connect_mode[, $tcp_or_udp[, $http_proxy]]);
+
+	$oicq->send2svr($command, $data[, $seq]);  # $seq is optional
+
+	$oicq->logout;
+
+
+=head2 Net::OICQ::ServerEvent
+
+Constructor:
+
+	$s_event = new Net::OICQ::ServerEvent $data, $oicq;
+
+Methods:
+
+	Net::OICQ::ServerEvent is a subclass of Net::OICQ::Event and inherits all methods of
+	Net::OICQ::Event.  Net::OICQ::ServerEvent has a method for each QQ command supported
+	by Net::OICQ module.
+
+=head2 Net::OICQ::ClientEvent
+
+Constructor:
+
+	$event = new Net::OICQ::ClientEvent $data, $oicq;
+
+=head2 Net::OICQ::Event
+
+This is the super class for Net::OICQ::ServerEvent and Net::OICQ::ClientEvent.
+It does not have a constructor.
+
+Methods:
+
+	client_ver, cmdcode, seq, cmd, process, parse and dump
+
+
+=head1 EXPORT
 
 None by default.
 
 =head1 AUTHOR
 
-Shufeng Tan <lt>perloicq@yahoo.com<gt>
+Shufeng Tan <perloicq@yahoo.com>
 
 =head1 SEE ALSO
 

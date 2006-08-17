@@ -1,8 +1,8 @@
 package Net::OICQ::Event;
 
-# $Id: Event.pm,v 1.15 2006/08/09 03:26:10 tans Exp $
+# $Id: Event.pm,v 1.16 2006/08/14 02:37:28 tans Exp $
 
-# Copyright (c) 2003 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified

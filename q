@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
-# $Id: q,v 1.5 2006/08/09 02:38:06 tans Exp $
+# $Id: q,v 1.7 2006/08/14 21:01:00 tans Exp $
 
-# Copyright (c) 2002, 2003 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2002 - 2006 Shufeng Tan.  All rights reserved.
 # 
 # This program is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -12,10 +12,12 @@ use strict;
 use Getopt::Long;
 use Net::OICQ::TextConsole;
 
+print "Crypt::OICQ version $Crypt::OICQ::VERSION, Net::OICQ version $Net::OICQ::VERSION\n";
+
 my $usage = <<EOF;
 Usage:
 If you use Borne shell, bash or ksh, type:
-OICQ_PW='xxxxxxx' $0 [-hi] [-d#] [-p<plugin>] id
+OICQ_PW='xxxxxxx' $0 [-hiu] [-d#] [-p<plugin>] id
 
 If you use csh or tcsh, type:
 setenv OICQ_PW 'xxxxxxx'
@@ -24,23 +26,28 @@ $0 [-hi] [-d#] [-p<plugin>] id
 Options:
     -h  print this help message
     -i  invisible mode
+    -u  UDP protocol (TCP is default)
     -d  debug mode
     -p<plugin>  specify plugin
 EOF
 
 my $invisible= 0;
+my $udp      = 0;
 my $debug    = 0;
 my $plugin   = "";
 my $help     = 0;
 
 GetOptions("debug=i"   => \$debug,
 	   "invisible" => \$invisible,
+	   "udp"       => \$udp,
            "plugin=s"  => \$plugin,
 	   "help"      => \$help);
 
 die $usage if $help;
 
 my $mode   = $invisible ? 'Invisible' : 'Normal';
+
+my $proto  = $udp ? 'udp' : 'tcp';
 
 my $uid = shift;
 
@@ -63,14 +70,12 @@ if ($pw) {
 
 our $oicq = $ui->{OICQ};
 $oicq->{EventQueueSize} = 100;
-$oicq->{FontSize}  = 'random';
+$oicq->{FontSize}  = '10';  # This can be random
 $oicq->{FontColor} = 'random';
 $oicq->{Debug} = $debug;
 
-$oicq->login($uid, $pw, $mode) or die "Failed to login.\n";
+$oicq->login($uid, $pw, $mode, $proto) or die "Failed to login.\n";
 $ui->{LastKbInput} = time;
-#$oicq->request_file_key();
-#$ui->set_mode($mode);
 $oicq->get_friends_list;
 $oicq->get_online_friends;
 $oicq->get_user_info($uid);
@@ -78,7 +83,7 @@ if ($plugin) {
     if (-f $plugin) {
         $ui->load_plugin($plugin);
     } else {
-        $ui->warn("Plugin $plugin does not exist\n");
+        $ui->warn("Plugin $plugin does not exist.\n");
     }
 }
 $ui->loop;

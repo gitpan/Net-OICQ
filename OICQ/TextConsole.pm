@@ -1,8 +1,8 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.28 2006/08/09 05:35:00 tans Exp $
+# $Id: TextConsole.pm,v 1.32 2006/08/17 00:30:14 tans Exp $
 
-# Copyright (c) 2003, 2004, 2005, 2006 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -27,7 +27,7 @@ my $HELP = <<EOF ;
 All lines that begin with / (slash) are treated as keyboard commands.
 
   /help, /?    - print this help message
-  /52482796    - set destination id num to 52482796
+  /52482796    - set destination id num to a QQ id or a group
   /away        - toggle auto-reply
   /ls [id]     - list id numbers saved in user directory
   /rm [id]     - remove locally saved user info
@@ -42,7 +42,7 @@ All lines that begin with / (slash) are treated as keyboard commands.
 
   /eval perl_one_liner - do whatever you want.  \$oicq and \$ui are pre-defined.
 
-  /xxxxx mesg  - send mesg to xxxx without changing destination id
+  /xxxxx mesg  - send on-line mesg to xxxx without changing destination id
   /get [id]    - get user info of the specified id (default to yourself)
   /f           - list all friends stored on the server
   /who         - get a list of online friends
@@ -55,7 +55,6 @@ All lines that begin with / (slash) are treated as keyboard commands.
   /del [id]    - delete a user from friend list
   /ban [id]    - forbid a user from contacting you
   /passwd xxxx - change passwd to xxxx
-  /g xxxx mesg - send group message
   /ginfo xxxx  - get group info
   /gs xxxx     - search group
   /gwho xxxx   - list online group members
@@ -83,7 +82,6 @@ my %KbCmd = (  # Code ref          # Min num of arguments
 	del	=> [\&del_contact,	1],
 	ban	=> [\&forbid_contact,	1],
 	passwd	=> [\&set_passwd,	1],
-	g	=> [\&send_group_msg,	2],
 	ginfo	=> [\&get_group_info,	1],
 	gs	=> [\&search_group,	1],
 	gwho	=> [\&group_online_members, 1],
@@ -94,14 +92,13 @@ my %KbCmd = (  # Code ref          # Min num of arguments
 	rm	=> [\&remove_saved_ids,	1],
 	buf	=> [\&show_msg_buffer,	0],
 	rmbuf	=> [\&clear_msg_buffer,	0],
-	hist	=> [sub {shift->{OICQ}->dump_event_queue}, 0],
 	obj	=> [\&show_object,	0],
 	set	=> [\&set_attribute,	0],
 	plugin	=> [\&load_plugin,	1],
+	hist    => [sub {shift->{OICQ}->dump_event_queue}, 0],
+	buf     => [sub { print shift->{MsgBuffer}, "\n" }, 0],
 	clear	=> [sub {system "clear"}, 0],
 );
-
-my $MaxMsgSize = 0x400;  # 1024 bytes
 
 my %AttrFilter = (
 	LogChat      => sub { return $_[0] if $_[0] =~ /^\w*$/; undef },
@@ -180,6 +177,7 @@ sub loop {
 	my $select = $self->{Select};
 	my $socket = $oicq->{Socket};
 	$select->add($socket);
+	$self->info("Type /help if you need it.\n");
 	$self->prompt;
   LOOP: while(1) {
 		$oicq->keepalive if time - $oicq->{LastKeepaliveTime} >= 60;
@@ -224,7 +222,7 @@ sub ui_send_msg {
 	if ($code eq '00') {
 		$self->info("Message accepted by server.\n");
 	} else {
-		$self->info("Server return code: $code\n");
+		$self->info("Server return code: 0x$code\n");
 	}
 }
 
@@ -235,15 +233,12 @@ sub ui_recv_msg {
 	my $srcid = $event->{SrcId};
 	my $dstid = $event->{DstId};
 	my $text  = $event->{Mesg};
-	$text =~ s|\x14(.)|'/'.unpack("H*", $1)|eg;
+	$text =~ s|\x14(.)|'/'.unpack("H*", $1)|seg;
 	if (!$event->{MsgTime}) {
 		print substr(localtime, 11, 9), "$srcid:\n", $text, "\n" if $srcid != 10000;
 		return;
 	}
-	if (defined($event->{Subtype}) and $event->{Subtype} == 129 and !defined($event->{FileName})) {
-		# dont know what to do with this
-		return;
-	}
+	return if defined($event->{Ignore}) and $event->{Ignore};
 	my $time  = $event->{MsgTime};
 	print color($Color{'timestamp'}), substr(localtime($time), 11, 9);
 	my $oicq = $self->{OICQ};
@@ -261,24 +256,54 @@ sub ui_recv_msg {
 
 	my $subtype = $event->{Subtype};
 	if (defined $subtype) {
-		if ($subtype == 0x81 and $event->{FileName}) {
-			print "would like to send you a file:\n",
-				"$event->{FileName} $event->{FileSize} bytes $event->{FileIP}";
-		} elsif ($subtype == 0x85) {
-			print "has cancelled file transfer.";
+		if (defined($event->{FileName})) {
+			print "would like to send you a file:\n$event->{FileName} $event->{FileSize} bytes. (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+		} elsif (defined($event->{VoiceChat})) {
+			print "requested a voice chat:\n$event->{VoiceChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+		} elsif (defined($event->{VideoChat})) {
+			print "requested a video chat:\n$event->{VideoChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+		} elsif (defined($event->{RequestCancelled})) {
+			print "cancelled request 0x$event->{RequestCancelled}.";
 		} else {
-			$text =~ s/[\x00-\x08]/_/g;
+			$text =~ s/[\x00-\x08]/_/sg;
 			print color($id_color), "\n$text";
 		}
 	} else {
-		$text =~ s/[\x00-\x08]/_/g;
-		print color($id_color), "\n$text";
+		if (defined($event->{Backdrop})) {
+			print "requested backdrop $event->{Backdrop}";
+		} elsif (defined($event->{BackdropCancelled})) {
+			print "cancelled backdrop.";
+		} else {
+			$text =~ s/[\x00-\x08]/_/sg;
+			print color($id_color), "\n$text";
+		}
 	}
 	print color('reset'), "\n";
         if ($event->{FontName}) {
 		print color('white'),"($event->{FontName} $event->{FontSize} #$event->{FontColor})", color('reset'), "\n";
 	}
 	$self->beep;
+
+	return 1 if exists($event->{GrpId}) or !defined($event->{H54_x});
+
+	# First check if we have a chatbot specially for the sender
+	my $chatbot = $srcinfo->{ChatBot};
+	# If not, use the global chatbot for everyone
+	$chatbot = $oicq->{ChatBot} unless defined $chatbot;
+	# Chatbot may be a reference to sub or a perl script file
+	if (defined $chatbot) {
+		if (ref($chatbot) eq 'CODE') {
+			eval { $chatbot->($event) };
+		} elsif (-f $chatbot) {
+			eval { require $chatbot; on_message($event) };
+		} else {
+			return 1;
+		}
+		if ($@) {
+			$oicq->log_t("Chatbot error: $@");
+			$self->error("Chatbot error: $@\n");
+		}
+	}
 }
 
 sub ui_get_user_info {
@@ -380,17 +405,30 @@ sub ui_recv_friend_status {
 
 sub ui_recv_service_msg {
 	my ($self, $event) = @_;
-	$self->info("Received service message from $event->{SrcId}:\n$event->{Comment}:",
-			defined($event->{Mesg}) ? $event->{Mesg} : "", "\n");
+	if ($event->{Comment} =~ /garbage/) {
+		$self->info("$event->{Comment}\n");
+		return;
+	}
+	$self->info("System message from $event->{SrcId}: $event->{Comment}",
+			defined($event->{Mesg}) ? "($event->{Mesg})" : "", "\n");
 }
 
 sub ui_do_group {
 	my ($self, $event) = @_;
-	if ($event->{SubCmd} =~ /^[01]a/) {  # group message
+	my $oicq = $self->{OICQ};
+	my $subcmd = $event->{SubCmd};
+	if ($subcmd =~ /^[01]a/) {  # group message
 		if ($event->{Reply} eq '00') {
 			$self->info("Group message sent\n");
 		} else {
 			$self->info("Server return code: $event->{Reply}\n");
+		}
+	} elsif ($subcmd eq '0b') {
+		if ($event->{Reply} eq '00') {
+			my @online_member = map {$oicq->get_nickname($_)."($_)"} @{$event->{OnlineMembers}};
+			$self->info("Group $event->{GrpIntId} online members: @online_member\n");
+		} else {
+			$self->info("Server reply: $event->{Error}\n");
 		}
 	} else {
 		$event->dump;
@@ -510,9 +548,6 @@ sub process_kbinput {
 	} else {
 		$self->{MsgBuffer} .= $kbinp;
 	}
-	if (length($self->{MsgBuffer}) > $MaxMsgSize) {
-		$self->warn("Msg buffer size > $MaxMsgSize bytes\n");
-	}
 }
 
 # Keyboard command help message
@@ -630,11 +665,6 @@ sub list_saved_ids {
 	$self->prompt;
 }
 
-sub show_msg_buffer {
-	my $self = shift;
-	print "\n$self->{MsgBuffer}\n";
-}
-
 sub clear_msg_buffer {
 	my $self = shift;
 	$self->{MsgBuffer} = "";
@@ -722,18 +752,19 @@ sub show_strangers {
 	my ($self) = @_;
 	$self->info('-'x22, " Strangers ", '-'x22, "\n");
 	my $info = $self->{OICQ}->{Info};
+	my $myid = $self->{OICQ}->{Id};
 	my $idx = 1;
 	foreach my $id (sort {$a <=> $b} keys %$info) {
 		my $hashref = $info->{$id};
-		next if defined $hashref->{Friend};
+		next if $id == $myid or defined $hashref->{Friend};
 		$self->info(sprintf "%2d.  %9d  %3s  %3s  %4s : %-16s \n",
-		    $idx++, $id,
-		    defined($hashref->{Sex}) ? $hashref->{Sex} : '',
-		    defined($hashref->{Age}) ? $hashref->{Age} : '',
-		    defined($hashref->{Face}) ? $hashref->{Face} : '',
-		    defined($hashref->{Nickname}) ? $hashref->{Nickname} : '');
-  }
-  $self->info('='x55, "\n");
+		$idx++, $id,
+		defined($hashref->{Sex}) ? $hashref->{Sex} : '',
+		defined($hashref->{Age}) ? $hashref->{Age} : '',
+		defined($hashref->{Face}) ? $hashref->{Face} : '',
+		defined($hashref->{Nickname}) ? $hashref->{Nickname} : '');
+	}
+	$self->info('='x55, "\n");
 }
 
 sub set_mode {
@@ -768,7 +799,6 @@ sub get_user_info {
 	} else {
 		$oicq->get_user_info($id);
 	}
-	$self->{show_user_info} = 1;
 }
 
 sub update_info {

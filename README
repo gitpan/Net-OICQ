@@ -26,8 +26,8 @@ To install Net::OICQ module type the following:
 
 To install the console-only client type the following from the source directory:
 
-   cp q /usr/local/bin/oicq
-   chmod a+x /usr/local/bin/oicq
+   cp q /usr/local/bin/qq
+   chmod a+x /usr/local/bin/qq
 
 You can name the client file to whatever you like.
 
@@ -46,7 +46,7 @@ published their source codes on the Internet.  I would never be able to write
 Net::OICQ without access to FreeOICQ source codes.
 
 Chen Peng reverse-engineered the assembly codes created by FreeOICQ and kindly
-gave me his C source codes for the cipher used in OICQ.
+made available his C source codes for the cipher used in OICQ.
 
 COPYRIGHT AND LICENCE
 
