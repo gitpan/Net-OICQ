@@ -1,6 +1,6 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.32 2006/08/17 00:30:14 tans Exp $
+# $Id: TextConsole.pm,v 1.34 2006/09/05 13:46:08 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -124,6 +124,9 @@ my $ConnectMode = \%Net::OICQ::ConnectMode;
 sub new {
 	my ($class, $oicq) = @_;
 
+	if (exists($ENV{OS}) && $ENV{OS} =~ /Windows/i) {
+		$ENV{ANSI_COLORS_DISABLED} = "yes";
+	}
 	defined $oicq or $oicq = new Net::OICQ;
 	my $self = {
 		OICQ      => $oicq,
@@ -181,7 +184,7 @@ sub loop {
 	$self->prompt;
   LOOP: while(1) {
 		$oicq->keepalive if time - $oicq->{LastKeepaliveTime} >= 60;
-	HANDLE: foreach my $handle ($select->can_read(0.1)) {
+	HANDLE: foreach my $handle ($select->can_read(60)) {
 			if ($handle eq $socket) {
 				my $packet;
 				$socket->recv($packet, 0x4000);
@@ -450,6 +453,11 @@ sub ui_del_contact {
 	$event->dump;
 }
 
+sub ui_update_info {
+	my ($self, $event) = @_;
+	$self->info("Server reponse to update_info: $event->{Data}\n");
+}
+
 # This method is used by ui_recv_msg
 sub id_color {
 	my ($self, $id) = @_;
@@ -467,12 +475,12 @@ sub ask_passwd {
 	print $prompt;
 	system(qw(stty -echo));
 	if ($? != 0) {
-		print "warning: password will be visible. ";
+		print "WARNING: password will be visible. ";
 	}
 	my $pw = <STDIN>;
 	system(qw(stty echo));
 	print "\n";
-	chomp $pw;
+	$pw =~ s/[^ -~]+$//;
 	return $pw;
 }
 

@@ -1,6 +1,6 @@
 Revision history for Perl extension Net::OICQ.
 
-$Id: Changes,v 1.19 2006/08/17 00:30:13 tans Exp $
+$Id: Changes,v 1.21 2006/09/05 13:46:08 tans Exp $
 
 0.01  Tue Oct  8 20:59:14 2002
 	- original version; created by h2xs 1.21 with options
@@ -79,3 +79,10 @@ $Id: Changes,v 1.19 2006/08/17 00:30:13 tans Exp $
 	- fixed udp login problem
 	- made decrypt_login_response a little smarter
 	- added code for recognizing more recv_msg types
+
+1.2  Tue September 5, 2006
+	- checked string length for MsgType 0x09(0x0a) in ServerEvent::recv_msg,	  also skipped ack_msg for ignored messages.
+	- fixed home directory bug for ActiveState Perl on Windows
+	- disabled ANSIColor for Windows CMD prompt (TextConsole.pm)
+	- changed timeout value for can_read in TextConsole.pm to 60 seconds
+	- added sub ui_update_info

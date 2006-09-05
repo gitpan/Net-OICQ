@@ -1,6 +1,6 @@
 package Net::OICQ::ServerEvent;
 
-# $Id: ServerEvent.pm,v 1.31 2006/08/17 00:30:14 tans Exp $
+# $Id: ServerEvent.pm,v 1.33 2006/09/05 13:46:08 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -155,9 +155,11 @@ sub recv_msg {
 		} elsif ($subtype == 0x35) {
 			$self->{Ignore} = 1;
 			$mesg = unpack('H*', substr($plain, 54));
-		} else {
+		} elsif (length($plain) > ($subtype+54)) {
 			$self->{H54_x} = unpack("H*", substr($plain, 54, $subtype));
 			$mesg = substr($plain, 54 + $subtype);
+		} else {
+			$mesg = substr($plain, 54);
 		}
 	} elsif ($msg_type == 0x20 or $msg_type == 0x2b) {  # Group message
 		my ($gid, $gtype, $srcid2, $x1, $seq, $time, $x2, $len, $x3) =
@@ -219,7 +221,7 @@ sub recv_msg {
 	}
 	$self->{Mesg} = $mesg;
 
-	if (defined $oicq->{Socket} and defined $mesg) {
+	if (defined $oicq->{Socket} and defined $mesg and ! $self->{Ignore}) {
 		$oicq->ack_msg($self->seq, $plain);
 	}
 	return 1;

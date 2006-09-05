@@ -1,6 +1,6 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.55 2006/08/15 01:52:40 tans Exp $
+# $Id: OICQ.pm,v 1.56 2006/09/01 17:07:31 tans Exp $
 
 # Copyright (c) 2002 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -21,7 +21,7 @@ eval "no encoding; use bytes;" if $] >= 5.008;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.1';
+our $VERSION = '1.2';
 
 #################### Begin OICQ protocol data ######################
 
@@ -164,7 +164,9 @@ my $ProxyConnect = "CONNECT %s HTTP/1.1\r\nAccept: */*\r\nContent-Type: text/htm
 
 sub new {
 	my ($class) = @_;
-	my $dir = "$ENV{HOME}/.oicq";
+	my $homedir = exists($ENV{HOME}) ? $ENV{HOME} :
+			(exists($ENV{HOMEPATH}) ? $ENV{HOMEPATH} : '.');
+	my $dir = "$homedir/.oicq";
 	if (-e $dir) {
 		-d $dir or croak "$dir exists but is not a directory";
 	} else {
