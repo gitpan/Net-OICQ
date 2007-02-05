@@ -1,8 +1,8 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.34 2006/09/05 13:46:08 tans Exp $
+# $Id: TextConsole.pm,v 1.9 2007/02/05 19:14:41 tans Exp $
 
-# Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2003 - 2007 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -11,9 +11,11 @@ package Net::OICQ::TextConsole;
 
 use strict;
 use warnings;
+use Encode;
 use Carp;
 use IO::Select;
 use Term::ANSIColor;
+use Term::ReadKey;
 
 use Net::OICQ;
 use Net::OICQ::ServerEvent;
@@ -95,7 +97,7 @@ my %KbCmd = (  # Code ref          # Min num of arguments
 	obj	=> [\&show_object,	0],
 	set	=> [\&set_attribute,	0],
 	plugin	=> [\&load_plugin,	1],
-	hist    => [sub {shift->{OICQ}->dump_event_queue}, 0],
+	hist    => [sub { my $ui = shift; foreach my $e (@{$ui->{OICQ}->{EventQueue}}) { $ui->info($e->dump) }}, 0],
 	buf     => [sub { print shift->{MsgBuffer}, "\n" }, 0],
 	clear	=> [sub {system "clear"}, 0],
 );
@@ -124,15 +126,17 @@ my $ConnectMode = \%Net::OICQ::ConnectMode;
 sub new {
 	my ($class, $oicq) = @_;
 
-	if (exists($ENV{OS}) && $ENV{OS} =~ /Windows/i) {
-		$ENV{ANSI_COLORS_DISABLED} = "yes";
-	}
 	defined $oicq or $oicq = new Net::OICQ;
 	my $self = {
 		OICQ      => $oicq,
 		MsgBuffer => "",
 		DstId     => "",
-		Select    => new IO::Select(\*STDIN)
+		Select    => new IO::Select(),
+	};
+	if ($^O eq 'MSWin32') {
+		$ENV{ANSI_COLORS_DISABLED} = "yes";
+	} else {
+		$self->{Select}->add(\*STDIN);
 	};
 	return bless($self, $class);
 }
@@ -150,6 +154,32 @@ sub warn {
 sub error {
 	my ($self, @text) = @_;
 	print color('red'), @text, color('reset');
+}
+
+sub mesg {
+	my ($self, $time, $group, $srcid, $text, $font) = @_;
+	Encode::from_to($text, "gb2312", "utf8");
+	unless (defined $time) {
+		print color($Color{'timestamp'}), substr(localtime, 11, 9), color('reset'),
+			"$srcid\n$text\n";
+		return;
+	}
+	my $oicq = $self->{OICQ};
+	my $nick = $oicq->get_nickname($srcid);
+	Encode::from_to($nick, "gb2312", "utf8");
+	my $id_color = $self->id_color($srcid);
+
+	my $srcinfo = $oicq->{Info}->{$srcid};
+	my $addr = $srcinfo->{Addr} || 'unknown';
+	my $ver  = defined $srcinfo->{Client} ? "0x$srcinfo->{Client}" : 'unknown';
+
+	print color($Color{'timestamp'}), substr(localtime($time), 11, 9),
+		$group ? "Group $group " : "",
+		color($id_color), "$nick($srcid, IP $addr, version $ver)\n", $text, "\n", color('reset');
+	if ($font) {
+		print color('white'), $font, color('reset'), "\n";
+	}
+	return;
 }
 
 sub ask {
@@ -182,9 +212,19 @@ sub loop {
 	$select->add($socket);
 	$self->info("Type /help if you need it.\n");
 	$self->prompt;
+	my $select_t = 60;
+	if ($^O eq 'MSWin32') {
+		$select_t = 1;
+		print "\n", '#'x72, "\n";
+		print "You will not be able to enter commands to this console client\n",
+			"due to a limitation of Win32 platform.  Please use win32qq script\n",
+			"included in this package.\n",
+			"本程序在Windows下无法接受用户输入,请使用Net::OICQ包中的另一个程序win32qq。\n",
+			'#'x72, "\n\n";
+	}
   LOOP: while(1) {
 		$oicq->keepalive if time - $oicq->{LastKeepaliveTime} >= 60;
-	HANDLE: foreach my $handle ($select->can_read(60)) {
+	HANDLE: foreach my $handle ($select->can_read($select_t)) {
 			if ($handle eq $socket) {
 				my $packet;
 				$socket->recv($packet, 0x4000);
@@ -238,59 +278,50 @@ sub ui_recv_msg {
 	my $text  = $event->{Mesg};
 	$text =~ s|\x14(.)|'/'.unpack("H*", $1)|seg;
 	if (!$event->{MsgTime}) {
-		print substr(localtime, 11, 9), "$srcid:\n", $text, "\n" if $srcid != 10000;
+		$self->mesg(undef, undef, $srcid, $text) if $srcid != 10000;;
 		return;
 	}
 	return if defined($event->{Ignore}) and $event->{Ignore};
-	my $time  = $event->{MsgTime};
-	print color($Color{'timestamp'}), substr(localtime($time), 11, 9);
+	my $time = $event->{MsgTime};
 	my $oicq = $self->{OICQ};
 	$self->set_dstid($srcid);
+	my $group;
 	if (defined $event->{GrpId}) {
 		$srcid = $event->{SrcId2};
-		print defined($event->{GrpId}) ? "Group $event->{GrpId} " : "";
+		$group = $event->{GrpId};
 	}
-	my $nick = $oicq->get_nickname($srcid);
-	my $id_color = $self->id_color($srcid);
-	my $srcinfo = $oicq->{Info}->{$srcid};
-	my $addr = $srcinfo->{Addr} || 'unknown';
-	my $ver  = defined $srcinfo->{Client} ? "0x$srcinfo->{Client}" : 'unknown';
-	print color($id_color), "$nick($srcid, IP $addr, version $ver) ";
+	my $font = $event->{FontName};
 
 	my $subtype = $event->{Subtype};
 	if (defined $subtype) {
 		if (defined($event->{FileName})) {
-			print "would like to send you a file:\n$event->{FileName} $event->{FileSize} bytes. (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+			$self->mesg($time, $group, $srcid, "would like to send you a file:\n$event->{FileName} $event->{FileSize} bytes. (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})", $font);
 		} elsif (defined($event->{VoiceChat})) {
-			print "requested a voice chat:\n$event->{VoiceChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+			$self->mesg($time, $group, $srcid, "requested a voice chat:\n$event->{VoiceChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})", $font);
 		} elsif (defined($event->{VideoChat})) {
-			print "requested a video chat:\n$event->{VideoChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})";
+			$self->mesg($time, $group, $srcid, "requested a video chat:\n$event->{VideoChat} (Request ID 0x$event->{RequestId}, IP $event->{RequestIP})", $font);
 		} elsif (defined($event->{RequestCancelled})) {
-			print "cancelled request 0x$event->{RequestCancelled}.";
+			$self->mesg($time, $group, $srcid, "cancelled request 0x$event->{RequestCancelled}.", $font);
 		} else {
 			$text =~ s/[\x00-\x08]/_/sg;
-			print color($id_color), "\n$text";
+			$self->mesg($time, $group, $srcid, $text, $font);
 		}
 	} else {
 		if (defined($event->{Backdrop})) {
-			print "requested backdrop $event->{Backdrop}";
+			$self->mesg($time, $group, $srcid, "requested backdrop $event->{Backdrop}", $font);
 		} elsif (defined($event->{BackdropCancelled})) {
-			print "cancelled backdrop.";
+			$self->mesg($time, $group, $srcid, "cancelled backdrop.", $font);
 		} else {
 			$text =~ s/[\x00-\x08]/_/sg;
-			print color($id_color), "\n$text";
+			$self->mesg($time, $group, $srcid, $text, $font);
 		}
 	}
-	print color('reset'), "\n";
-        if ($event->{FontName}) {
-		print color('white'),"($event->{FontName} $event->{FontSize} #$event->{FontColor})", color('reset'), "\n";
-	}
-	$self->beep;
+	#$self->beep;
 
 	return 1 if exists($event->{GrpId}) or !defined($event->{H54_x});
 
 	# First check if we have a chatbot specially for the sender
-	my $chatbot = $srcinfo->{ChatBot};
+	my $chatbot = $oicq->{Info}->{$srcid}->{ChatBot};
 	# If not, use the global chatbot for everyone
 	$chatbot = $oicq->{ChatBot} unless defined $chatbot;
 	# Chatbot may be a reference to sub or a perl script file
@@ -408,11 +439,7 @@ sub ui_recv_friend_status {
 
 sub ui_recv_service_msg {
 	my ($self, $event) = @_;
-	if ($event->{Comment} =~ /garbage/) {
-		$self->info("$event->{Comment}\n");
-		return;
-	}
-	$self->info("System message from $event->{SrcId}: $event->{Comment}",
+	$self->info("System message from $event->{SrcId}: $event->{Comment}\n",
 			defined($event->{Mesg}) ? "($event->{Mesg})" : "", "\n");
 }
 
@@ -434,7 +461,7 @@ sub ui_do_group {
 			$self->info("Server reply: $event->{Error}\n");
 		}
 	} else {
-		$event->dump;
+		$self->info($event->dump);
 	}
 }
 
@@ -450,7 +477,7 @@ sub ui_add_contact_2 {
 
 sub ui_del_contact {
 	my ($self, $event) = @_;
-	$event->dump;
+	$self->info($event->dump);
 }
 
 sub ui_update_info {
@@ -473,12 +500,10 @@ sub id_color {
 sub ask_passwd {
 	my ($self, $prompt) = @_;
 	print $prompt;
-	system(qw(stty -echo));
-	if ($? != 0) {
-		print "WARNING: password will be visible. ";
-	}
+	local $SIG{__DIE__} = { ReadMode 0 };
+	ReadMode 2;
 	my $pw = <STDIN>;
-	system(qw(stty echo));
+	ReadMode 0;
 	print "\n";
 	$pw =~ s/[^ -~]+$//;
 	return $pw;
@@ -492,6 +517,12 @@ sub get_new_passwd {
 	return $pw if $pw eq $pw2;
 	$self->error("Passwords don't match.\n");
 	return;
+}
+
+sub kb_cmd {
+	my ($self, $cmd) = @_;
+	return undef unless exists $KbCmd{$cmd};
+	return $KbCmd{$cmd};
 }
 
 sub process_kbinput {
@@ -523,7 +554,7 @@ sub process_kbinput {
 			return;
 		} elsif (exists $KbCmd{$cmd}) {
 			if (@args < $KbCmd{$cmd}->[1]) {
-				$self->error("Not enought argument for command $cmd\n");
+				$self->error("Not enough argument for command $cmd\n");
 			} else {
 				eval { $KbCmd{$cmd}->[0]->($self, @args) };
 				$@ && $self->error("$@");
@@ -737,7 +768,7 @@ sub AUTOLOAD {
 		$self->warn("Don't know how to handle QQ command $name.\n");
 		my $event = shift;
 		if (defined($event) && ref($event) =~ /Event/) {
-			$event->dump;
+			$self->info($event->dump);
 		}
 		return;
 	}

@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 1.7 2003/11/26 20:30:12 tans Exp $
+# $Id: Makefile.PL,v 1.8 2007/01/05 13:39:16 tans Exp $
 
 # Copyright (c) 2002, 2003 Shufeng Tan.  All rights reserved.
 # 
@@ -18,10 +18,12 @@ WriteMakefile(
     'PREREQ_PM'		=> {Crypt::OICQ     => 1.0,
                             Digest::MD5     => 0.1,
 		            IO::Select      => 0.1,
-                            Term::ANSIColor => 0.1},
+                            Term::ANSIColor => 0.1,
+		    	    Term::ReadKey   => 0,
+		    	},
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'OICQ.pm', # retrieve abstract from module
-       AUTHOR     => 'Shufeng Tan <perloicq@yahoo.com>') : ()),
+       AUTHOR     => 'Shufeng Tan <shufengtan@gmail.com>') : ()),
     'LIBS'		=> [''],
     'DEFINE'		=> '',
     'INC'		=> '-I.',

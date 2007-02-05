@@ -1,6 +1,6 @@
 package Net::OICQ::ServerEvent;
 
-# $Id: ServerEvent.pm,v 1.33 2006/09/05 13:46:08 tans Exp $
+# $Id: ServerEvent.pm,v 1.1 2007/01/02 21:08:52 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 

@@ -1,12 +1,25 @@
-Net/OICQ version 1.0
+Net-OICQ
 
 This module implements OICQ protocol, used by the instant messaging service
 operated by Tencent Technology Limited, China.
 
 INSTALLATION
 
-In Version 0.8 and later, the encryption code is in a separate module named
-Crypt::OICQ.  Please download and install Crypt::OICQ module first.
+To install this module, run the following commands:
+
+    perl Build.PL
+    ./Build
+    ./Build test
+    ./Build install
+
+To install the console-only client type the following from the source directory:
+
+   cp q /usr/local/bin/qq
+   chmod a+x /usr/local/bin/qq
+
+You can name the client file to whatever you like.
+
+NOTE
 
 If you have installed version 0.7 or earlier version of Net::OICQ, please
 uninstall the old version by running the following commands as root:
@@ -17,19 +30,6 @@ or
 
    find /usr/local/lib/perl5/site_perl -name OICQ -exec rm -r \{\} \;
 
-To install Net::OICQ module type the following:
-
-   perl Makefile.PL
-   make test
-   su
-   make install
-
-To install the console-only client type the following from the source directory:
-
-   cp q /usr/local/bin/qq
-   chmod a+x /usr/local/bin/qq
-
-You can name the client file to whatever you like.
 
 DEPENDENCIES
 
@@ -50,7 +50,7 @@ made available his C source codes for the cipher used in OICQ.
 
 COPYRIGHT AND LICENCE
 
-Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
+Copyright (c) 2003 - 2007 Shufeng Tan.  All rights reserved.
 
 This package is free software and is provided "as is" without express
 or implied warranty.  It may be used, redistributed and/or modified

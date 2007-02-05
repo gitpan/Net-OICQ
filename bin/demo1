@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
-# $Id: demo1,v 1.2 2006/09/01 17:07:31 tans Exp $
+# $Id: demo1,v 1.2 2007/01/02 21:30:28 tans Exp $
 
-# Copyright (c) 2006 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2006, 2007 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -14,6 +14,7 @@ use strict;
 use Net::OICQ;
 use Net::OICQ::ServerEvent;
 use Net::OICQ::ClientEvent;
+use Term::ReadKey;
 
 my $uid = shift;
 die "Usage: $0 <QQ_id>\n" unless $uid =~ /^[1-9]\d{2,9}$/;
@@ -26,11 +27,11 @@ my $pw = $ENV{OICQ_PW};
 if ($pw) {
 	print "OICQ_PW found in env.\n";
 } else {
-	system(qw(stty -echo));
-	warn "WARNING: unable to hide the password.\n" unless $? == 0;
 	print "Password: ";
+	local $SIG{__DIE__} = { ReadMode 0 };
+	ReadMode 2;
 	$pw = <STDIN>;
-	system(qw(stty echo));
+	ReadMode 0;
 	$pw =~ s/[^ -~]*$//;
 	print "\n";
 	die "Password is empty.\n" unless $pw;

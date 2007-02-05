@@ -1,6 +1,6 @@
 package Net::OICQ::ClientEvent;
 
-# $Id: ClientEvent.pm,v 1.12 2006/07/31 16:42:36 tans Exp $
+# $Id: ClientEvent.pm,v 1.1 2007/01/02 21:08:52 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 

@@ -1,6 +1,6 @@
 package Net::OICQ::Event;
 
-# $Id: Event.pm,v 1.16 2006/08/14 02:37:28 tans Exp $
+# $Id: Event.pm,v 1.2 2007/02/01 22:07:16 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -110,22 +110,23 @@ sub parse {
 sub dump {
 	my ($self) = @_;
 	my $ref = ref($self);
-	printf "%s $ref %s 0x%s\n", substr(localtime($self->{Time}), 4, 15),
-		$self->cmd, unpack("H*", $self->seq);
+	my $res = sprintf "%s $ref %s 0x%s\n", substr(localtime($self->{Time}), 4, 15),
+			$self->cmd, unpack("H*", $self->seq);
 	foreach my $attr (keys %$self) {
 		next if $attr =~ /^(?:Data|Time|Header|OICQ)$/;
-		print "  $attr: ";
+		$res .= "  $attr: ";
 		my $value = $self->{$attr};
 		if (ref($value) eq 'ARRAY') {
-			print '[', join(', ', @$value), "]\n";
+			$res .= '[' . join(', ', @$value) . "]\n";
 		} elsif (ref($value) eq 'HASH') {
 			foreach my $k (keys %$value) {
-				print "    $k: $value->{$k}\n";
+				$res .= "    $k: $value->{$k}\n";
 			}
 		} else {
-			print "$value\n";
+			$res .= "$value\n";
 		}
 	}
+	return $res;
 }
 
 1

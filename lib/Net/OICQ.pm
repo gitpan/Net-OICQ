@@ -1,8 +1,8 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.56 2006/09/01 17:07:31 tans Exp $
+# $Id: OICQ.pm,v 1.5 2007/02/01 22:07:16 tans Exp $
 
-# Copyright (c) 2002 - 2006 Shufeng Tan.  All rights reserved.
+# Copyright (c) 2002 - 2007 Shufeng Tan.  All rights reserved.
 # 
 # This package is free software and is provided "as is" without express
 # or implied warranty.  It may be used, redistributed and/or modified
@@ -12,16 +12,16 @@ package Net::OICQ;
 use 5.008;
 use strict;
 use warnings;
+use bytes;
 use Carp;
 use FileHandle;
 use IO::Socket::INET;
 use Digest::MD5;
 
-eval "no encoding; use bytes;" if $] >= 5.008;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.2';
+our $VERSION = '1.3';
 
 #################### Begin OICQ protocol data ######################
 
@@ -52,7 +52,7 @@ use constant ETX => "\x03";
 # 0x0b 0x37 for packets from QQ 2003iii 0304
 # 0x0e 0x2d for packets from GB client version 2005 sp1 V05.0.201.110
 
-our $CLIENT_VER = "\x0e\x2d";
+our $CLIENT_VER = "\x0f\x1d"; #"\x0e\x2d";
 
 # Bytes 0x03-0x04 indicate command
 
@@ -380,14 +380,6 @@ sub show_address {
 	return $ip unless length($data) >= 6;
 	my $port = unpack('n', substr($data, 4, 2));
 	return "$ip:$port";
-}
-
-sub dump_event_queue {
-	my ($self) = @_;
-	foreach my $event (@{$self->{EventQueue}}) {
-		$event->dump;
-	}
-	return;
 }
 
 sub remove_saved_id {
