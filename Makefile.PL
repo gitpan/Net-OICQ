@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 1.8 2007/01/05 13:39:16 tans Exp $
+# $Id: Makefile.PL,v 1.9 2007/02/08 04:35:32 tans Exp $
 
 # Copyright (c) 2002, 2003 Shufeng Tan.  All rights reserved.
 # 
@@ -14,7 +14,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'		=> 'Net::OICQ',
-    'VERSION_FROM'	=> 'OICQ.pm', # finds $VERSION
+    'VERSION_FROM'	=> 'lib/Net/OICQ.pm', # finds $VERSION
     'PREREQ_PM'		=> {Crypt::OICQ     => 1.0,
                             Digest::MD5     => 0.1,
 		            IO::Select      => 0.1,
@@ -22,7 +22,7 @@ WriteMakefile(
 		    	    Term::ReadKey   => 0,
 		    	},
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM => 'OICQ.pm', # retrieve abstract from module
+      (ABSTRACT_FROM => 'lib/Net/OICQ.pm', # retrieve abstract from module
        AUTHOR     => 'Shufeng Tan <shufengtan@gmail.com>') : ()),
     'LIBS'		=> [''],
     'DEFINE'		=> '',

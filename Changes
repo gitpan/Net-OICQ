@@ -1,6 +1,6 @@
 Revision history for Perl extension Net::OICQ.
 
-$Id: Changes,v 1.25 2007/02/05 18:56:29 tans Exp $
+$Id: Changes,v 1.26 2007/02/09 13:10:22 tans Exp $
 
 0.01  Tue Oct  8 20:59:14 2002
 	- original version; created by h2xs 1.21 with options
@@ -93,3 +93,7 @@ $Id: Changes,v 1.25 2007/02/05 18:56:29 tans Exp $
 	- got rid of the use of stty command by requiring Term::ReadKey module
 	- added win32qq for ActiveState perl users
 	- warn ActiveState Perl users that the console client is unable to accept user input.
+
+1.3001 Fri February 9, 2007
+	- fixed errors in Makefile.PL, which is still used by older version of CPAN
+	- fixed dump_event_queue bug in demo1

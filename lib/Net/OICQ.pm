@@ -1,6 +1,6 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.5 2007/02/01 22:07:16 tans Exp $
+# $Id: OICQ.pm,v 1.6 2007/02/09 13:10:22 tans Exp $
 
 # Copyright (c) 2002 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -21,7 +21,7 @@ use Digest::MD5;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.3';
+our $VERSION = '1.3001';
 
 #################### Begin OICQ protocol data ######################
 
