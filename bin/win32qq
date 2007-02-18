@@ -51,24 +51,27 @@ sub set_myinfo {
 }
 
 sub get_chat_window {
-	my ($self, $qq) = @_;
+	my ($self, $qq, $group) = @_;
 	die "Bad arg for get_chat_window: $qq\n" unless $qq =~ /^\d+$/;
 	my $cw = $self->{ChatWindow};
-	if (exists $cw->{$qq}) {
-		return $cw->{$qq};
-	}
+	my $winid = $group ? $group : $qq;
+	return $cw->{$winid} if exists $cw->{$winid};
+
 	my $dt = Win32::GUI::GetDesktopWindow();
 	my $dtw = Win32::GUI::Width($dt);
 	my $dth = Win32::GUI::Height($dt);
-	my $win_l = sprintf '%.0f', (($qq % 2) ? $dtw/2 : 0) + rand(50);
-	my $win_t = sprintf '%.0f', (length($qq)-5)*10+rand(10);
+	my $win_l = sprintf '%.0f', (($winid % 2) ? $dtw/2 : 0) + rand(50);
+	my $win_t = sprintf '%.0f', (length($winid)-5)*10+rand(10);
 	my $oicq = $self->{OICQ};
 	my $myid = $oicq->{Id};
 	my ($width, $height) = (500, 500);
+	# Note: the word "group" in the window title will be used to check whether it is
+	# a chat window for a group
 	my $chatwin = Win32::GUI::Window->new(-name => 'Chat',
-		-title => "$myid Chat with $qq",
+		-title => $group ? "$myid chat in group $group" : "$myid chat with $qq",
 		-pos => [$win_l, $win_t], -size => [$width, $height]);
-	$chatwin->AddLabel(-name => "ChatInfo", -title => "$myid -> $qq",
+	$chatwin->AddLabel(-name => "ChatInfo",
+		-title => $group ? "$myid -> group $group" : "$myid -> $qq",
 	       	-pos => [0, 0], -size => [$width -8, 20]);
 	$chatwin->AddTextfield(-name => "ChatOutput", -readonly => 1,
 		-pos => [0, 20], -size => [$width - 8, $height -120],
@@ -81,7 +84,7 @@ sub get_chat_window {
 	$chatwin->AddButton(-name => "ChatCancelButton", -title => 'Cancel', -cancel => 1,
 		-pos => [$width - 48, $height - 80], -size => [40, 20]);
 
-	$cw->{$qq} = $chatwin;
+	$cw->{$winid} = $chatwin;
 	return $chatwin;
 }
 
@@ -103,7 +106,7 @@ sub error {
 
 sub mesg {
 	my ($self, $time, $group, $srcid, $text, $font) = @_;
-	my $win = $self->get_chat_window($srcid);
+	my $win = $self->get_chat_window($srcid, $group);
 	return 0 unless defined $win;
 	$win->{ChatInput}->SetFocus();
 	$win->Show();
@@ -365,27 +368,31 @@ sub Input_KeyUp {
 sub ChatInput_KeyUp {
 	my ($time, $key) = @_;
 	return 1 unless $key == 0x0d;
-	my ($qq, $win) = get_active_chat_window();
+	my ($winid, $win) = get_active_chat_window();
 	return 1 unless defined $win;
 	my $input = $win->{ChatInput};
 	return $GUI->text_input_handler($input, $key,
-		sub {my ($gui, $text, $qq, $win) = @_;
+		sub {my ($gui, $text, $winid, $win) = @_;
 			my $oicq = $gui->{OICQ};
 			my $output = $win->{ChatOutput};
 			my $nick = $oicq->get_nickname($oicq->{Id});
 			$output->Append(substr(localtime, 11, 9) . "$nick\r\n$text\r\n");
-			$gui->{OICQ}->send_msg($qq, $text);
+			if ($win->Text =~ /group/) {
+				$oicq->send_group_msg($winid, $text);
+			} else {
+				$oicq->send_msg($winid, $text);
+			}
 			return 1;
 		},
-		$qq, $win);
+		$winid, $win);
 }
 
 sub get_active_chat_window {
 	my $handle = Win32::GUI->GetActiveWindow();
 	my $chatwin = $GUI->{ChatWindow};
-	foreach my $qq (keys %$chatwin) {
-		if ($chatwin->{$qq}->{'-handle'} eq $handle) {
-			return ($qq, $chatwin->{$qq});
+	foreach my $winid (keys %$chatwin) {
+		if ($chatwin->{$winid}->{'-handle'} eq $handle) {
+			return ($winid, $chatwin->{$winid});
 		}
 	}
 	return;

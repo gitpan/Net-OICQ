@@ -1,6 +1,6 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.9 2007/02/05 19:14:41 tans Exp $
+# $Id: TextConsole.pm,v 1.12 2007/02/16 17:56:36 tans Exp $
 
 # Copyright (c) 2003 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -133,6 +133,7 @@ sub new {
 		DstId     => "",
 		Select    => new IO::Select(),
 	};
+	$self->{'UTF-8'}  = exists($ENV{LANG}) and defined($ENV{LANG}) and $ENV{LANG} =~ /UTF-8/;
 	if ($^O eq 'MSWin32') {
 		$ENV{ANSI_COLORS_DISABLED} = "yes";
 	} else {
@@ -141,32 +142,37 @@ sub new {
 	return bless($self, $class);
 }
 
+sub output_filter {
+	my $self = shift;
+	$self->{'UTF-8'} || return @_;
+	map { encode('utf8', decode('euc-cn', $_)) } @_;
+}
+
 sub info {
 	my ($self, @text) = @_;
-	print color('green'), @text, color('reset');
+	print color('green'), $self->output_filter(@text), color('reset');
 }
 
 sub warn {
 	my ($self, @text) = @_;
-	print color('yellow'), @text, color('reset');
+	print color('yellow'), $self->output_filter(@text), color('reset');
 }
 
 sub error {
 	my ($self, @text) = @_;
-	print color('red'), @text, color('reset');
+	print color('red'), $self->output_filter(@text), color('reset');
 }
 
 sub mesg {
 	my ($self, $time, $group, $srcid, $text, $font) = @_;
-	Encode::from_to($text, "gb2312", "utf8");
+	($text) = $self->output_filter($text);
 	unless (defined $time) {
 		print color($Color{'timestamp'}), substr(localtime, 11, 9), color('reset'),
 			"$srcid\n$text\n";
 		return;
 	}
 	my $oicq = $self->{OICQ};
-	my $nick = $oicq->get_nickname($srcid);
-	Encode::from_to($nick, "gb2312", "utf8");
+	my ($nick) = $self->output_filter($oicq->get_nickname($srcid));
 	my $id_color = $self->id_color($srcid);
 
 	my $srcinfo = $oicq->{Info}->{$srcid};
@@ -177,7 +183,7 @@ sub mesg {
 		$group ? "Group $group " : "",
 		color($id_color), "$nick($srcid, IP $addr, version $ver)\n", $text, "\n", color('reset');
 	if ($font) {
-		print color('white'), $font, color('reset'), "\n";
+		print color('white'), $self->output_filter($font), color('reset'), "\n";
 	}
 	return;
 }
@@ -525,6 +531,12 @@ sub kb_cmd {
 	return $KbCmd{$cmd};
 }
 
+sub input_filter {
+	my $self = shift;
+	return @_ unless $self->{'UTF-8'};
+	map { encode('euc-cn', decode('utf-8', $_)) } @_
+}
+
 sub process_kbinput {
 	my ($self, $kbinp) = @_;
 
@@ -541,7 +553,9 @@ sub process_kbinput {
 		if ($cmd =~ /^\d+$/) {
 			if (@args) {
 				my $dstid = ($cmd <= 1000) ? $self->find_friend_id($cmd) : $cmd;
-				$oicq->send_msg($dstid, "@args") if defined $dstid;
+				my $text = join('', @args);
+				($text) = $self->input_filter($text);
+				$oicq->send_msg($dstid, $text) if defined $dstid;
 			} else {
 				$self->set_dstid($cmd);
 			}
@@ -556,6 +570,7 @@ sub process_kbinput {
 			if (@args < $KbCmd{$cmd}->[1]) {
 				$self->error("Not enough argument for command $cmd\n");
 			} else {
+				@args = $self->input_filter(@args);
 				eval { $KbCmd{$cmd}->[0]->($self, @args) };
 				$@ && $self->error("$@");
 				return;  # don't return prompt
@@ -571,8 +586,10 @@ sub process_kbinput {
 		if ($self->{MsgBuffer} =~ /\S/) {
 			if (exists($self->{DstId}) && $self->{DstId} =~ /^\d+$/) {
 				my $dstid = $self->{DstId};
-				chomp $self->{MsgBuffer};
-				if ($oicq->send_msg($dstid, $self->{MsgBuffer})) {
+				my $text = $self->{MsgBuffer};
+				chomp $text;
+				($text) = $self->input_filter($text);
+				if ($oicq->send_msg($dstid, $text)) {
 					$self->{MsgBuffer} = "";
 				} else {
 					$self->error("Message not sent.\n");
@@ -760,7 +777,7 @@ sub load_plugin {
 
 sub AUTOLOAD {
 	my $self = shift;
-	my $type = ref($self) or croak "$self is not an object";
+	my $type = ref($self) or die "$self is not an object";
 	my $name = $AUTOLOAD;
 	$name =~ s/.*://;
 	return if $name eq 'DESTROY';
