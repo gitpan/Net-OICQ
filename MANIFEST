@@ -5,13 +5,13 @@ MANIFEST
 META.yml
 Makefile.PL
 README
-RELEASE.gb
-bin/demo1
+RELEASE.utf8
 bin/qq
-bin/win32qq
+demo1
 lib/Net/OICQ.pm
 lib/Net/OICQ/ClientEvent.pm
 lib/Net/OICQ/TextConsole.pm
 lib/Net/OICQ/Event.pm
 lib/Net/OICQ/ServerEvent.pm
 t/00-load.t
+win32qq

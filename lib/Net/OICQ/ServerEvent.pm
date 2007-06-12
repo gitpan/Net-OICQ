@@ -1,6 +1,6 @@
 package Net::OICQ::ServerEvent;
 
-# $Id: ServerEvent.pm,v 1.1 2007/01/02 21:08:52 tans Exp $
+# $Id: ServerEvent.pm,v 1.3 2007/06/11 04:37:44 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -125,7 +125,7 @@ sub recv_msg {
 		$oicq->{Info}->{$srcid} = {};
 	}
 	my $mesg;
-	if ($msg_type == 0x09 or $msg_type == 0x0a) {
+	if (grep {$msg_type == $_} 0x09, 0x0a, 0x84, 0x85) {
 		my ($client, $srcid2, $dstid2, $x, $subtype, $seq, $time) =
 			unpack('H4NNH32nnN', substr($plain, 20, 34));
 		$oicq->{Info}->{$srcid}->{Client} = $client;
@@ -155,9 +155,8 @@ sub recv_msg {
 		} elsif ($subtype == 0x35) {
 			$self->{Ignore} = 1;
 			$mesg = unpack('H*', substr($plain, 54));
-		} elsif (length($plain) > ($subtype+54)) {
-			$self->{H54_x} = unpack("H*", substr($plain, 54, $subtype));
-			$mesg = substr($plain, 54 + $subtype);
+		} elsif ($subtype == 0x0b) {
+			$mesg = substr($plain, 73);
 		} else {
 			$mesg = substr($plain, 54);
 		}
@@ -300,9 +299,9 @@ sub keep_alive {
 	my $self = shift;
 	my $oicq = $self->{OICQ};
 	my $plain = $self->{Data};
-	my @field = split($Net::OICQ::RS, $plain);
-	$oicq->{UserCount} = $field[2];
-	$self->{ServerInfo} = \@field;
+	#my @field = split($Net::OICQ::RS, $plain);
+	#$oicq->{UserCount} = $field[2];
+	#$self->{ServerInfo} = \@field;
 	return 1;
 }
 

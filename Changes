@@ -1,6 +1,6 @@
 Revision history for Perl extension Net::OICQ.
 
-$Id: Changes,v 1.26 2007/02/09 13:10:22 tans Exp $
+$Id: Changes,v 1.27 2007/06/07 18:52:06 tans Exp $
 
 0.01  Tue Oct  8 20:59:14 2002
 	- original version; created by h2xs 1.21 with options
@@ -101,3 +101,6 @@ $Id: Changes,v 1.26 2007/02/09 13:10:22 tans Exp $
 1.3002 Fri February 16, 2007
 	- added support for zh_CN.UTF-8 locale in TextConsole.pm
 	- fixed group chat annoyance in win32qq 
+
+1.4    Thu June 7, 2007
+	- rewrite login procedure to deal with Tencent's massive protocol change

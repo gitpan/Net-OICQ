@@ -5,19 +5,22 @@ operated by Tencent Technology Limited, China.
 
 INSTALLATION
 
-To install this module, run the following commands:
+To install this module, run the following commands in the source directory:
 
     perl Build.PL
     ./Build
     ./Build test
     ./Build install
 
-To install the console-only client type the following from the source directory:
+Or, you can use Makefile.PL if you have make command:
 
-   cp q /usr/local/bin/qq
-   chmod a+x /usr/local/bin/qq
+    perl Makefile.PL
+    make test
+    make install
 
-You can name the client file to whatever you like.
+A command-line QQ client named qq will be installed in /usr/bin or /usr/local/bin
+directory.  This program requires Term::ANSIColor and Term::ReadKey modules.
+
 
 NOTE
 

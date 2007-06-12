@@ -1,6 +1,6 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.12 2007/02/16 17:56:36 tans Exp $
+# $Id: TextConsole.pm,v 1.14 2007/06/11 04:37:44 tans Exp $
 
 # Copyright (c) 2003 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -324,7 +324,7 @@ sub ui_recv_msg {
 	}
 	#$self->beep;
 
-	return 1 if exists($event->{GrpId}) or !defined($event->{H54_x});
+	return 1 if exists($event->{GrpId});
 
 	# First check if we have a chatbot specially for the sender
 	my $chatbot = $oicq->{Info}->{$srcid}->{ChatBot};
@@ -352,7 +352,7 @@ sub ui_get_user_info {
 	my $oicq = $self->{OICQ};
 	if ($field->[0] eq $oicq->{Id} && @{$oicq->{EventQueue}} < 10) {
 		# Dont display user info requested immediately after login
-		$self->info("Retrieved info about self $field->[0].\n");
+		$self->info("Retrieved info about self $field->[0]\n");
 		return;
 	}
 	$self->info('-'x34, ' User Info ', '-'x34, "\n");

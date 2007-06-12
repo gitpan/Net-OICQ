@@ -1,10 +1,12 @@
 ---
 name: Net-OICQ
-version: 1.3002
+version: 1.4
 author:
   - 'Shufeng Tan <shufengtan@gmail.com>'
 abstract: Perl extension for QQ instant messaging protocol
 license: perl
+resources:
+  license: http://dev.perl.org/licenses/
 build_requires:
   Crypt::OICQ: 1
   Digest::MD5: 0.1
@@ -12,14 +14,10 @@ build_requires:
   Term::ANSIColor: 0.1
   Term::ReadKey: 2.30
   Test::More: 0
-generated_by: Module::Build version 0.2805
-meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
 provides:
   Net::OICQ:
     file: lib/Net/OICQ.pm
-    version: 1.3002
+    version: 1.4
   Net::OICQ::ClientEvent:
     file: lib/Net/OICQ/ClientEvent.pm
   Net::OICQ::Event:
@@ -28,5 +26,7 @@ provides:
     file: lib/Net/OICQ/ServerEvent.pm
   Net::OICQ::TextConsole:
     file: lib/Net/OICQ/TextConsole.pm
-resources:
-  license: http://dev.perl.org/licenses/
+generated_by: Module::Build version 0.2808
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2
