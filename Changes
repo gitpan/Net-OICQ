@@ -1,6 +1,6 @@
 Revision history for Perl extension Net::OICQ.
 
-$Id: Changes,v 1.27 2007/06/07 18:52:06 tans Exp $
+$Id: Changes,v 1.28 2007/06/15 15:28:36 tans Exp $
 
 0.01  Tue Oct  8 20:59:14 2002
 	- original version; created by h2xs 1.21 with options
@@ -104,3 +104,6 @@ $Id: Changes,v 1.27 2007/06/07 18:52:06 tans Exp $
 
 1.4    Thu June 7, 2007
 	- rewrite login procedure to deal with Tencent's massive protocol change
+
+1.4001 Thu June 15, 2007
+	- fixed a bug in login subroutine that mishandles login server redirect on error code 10

@@ -1,6 +1,6 @@
 package Net::OICQ::TextConsole;
 
-# $Id: TextConsole.pm,v 1.14 2007/06/11 04:37:44 tans Exp $
+# $Id: TextConsole.pm,v 1.15 2007/06/15 18:09:53 tans Exp $
 
 # Copyright (c) 2003 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -282,7 +282,7 @@ sub ui_recv_msg {
 	my $srcid = $event->{SrcId};
 	my $dstid = $event->{DstId};
 	my $text  = $event->{Mesg};
-	$text =~ s|\x14(.)|'/'.unpack("H*", $1)|seg;
+	$text =~ s|\x14(.)|'/'.unpack("H*", $1)|seg if $text;
 	if (!$event->{MsgTime}) {
 		$self->mesg(undef, undef, $srcid, $text) if $srcid != 10000;;
 		return;

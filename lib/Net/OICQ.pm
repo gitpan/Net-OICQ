@@ -1,6 +1,6 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.13 2007/06/12 10:43:56 tans Exp $
+# $Id: OICQ.pm,v 1.17 2007/06/15 18:32:46 tans Exp $
 
 # Copyright (c) 2002 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -22,7 +22,7 @@ use Encode;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.4';
+our $VERSION = '1.5';
 
 #################### Begin OICQ protocol data ######################
 
@@ -297,7 +297,7 @@ sub build_login_packet {
 		#pack('H*', '09f9cce1f7e8502203cd7731deabfcda') .
 		pack('H*', '41d118ac147858f1d0814d7d7d7bd91f') .
 		#pack('H*', '01') .
-		pack('C', rand(0xff)) .
+		pack('C', 0xc4) . #rand(0xff)) .
 		$ConnectMode{$self->{ConnectMode}} . "\0"x25 .
 		#pack('H*', '2447087cb1d3404cbda9037f36689e39') .
 		pack('H*', 'd7e27d1ab27e6346a70c4c0c3bd53256') .
@@ -326,19 +326,25 @@ sub build_logout_packet {
 sub log {
 	my $self = shift;
 	my $log = $self->{Log};
-	print $log @_;
+	my $mesg = "@_";
+	#Encode::from_to($mesg, 'euc-cn', 'utf8');
+	print $log $mesg;
 }
 
 sub logf {
 	my $self = shift;
 	my $log = $self->{Log};
-	printf $log @_;
+	my $mesg = "@_";
+	#Encode::from_to($mesg, 'euc-cn', 'utf8');
+	printf $log $mesg;
 }
 
 sub log_t {
 	my ($self, @msg) = @_;
 	my $log = $self->{Log};
-	print $log substr(localtime, 4, 16), @msg, "\n";
+	my $mesg = "@msg\n";
+	#Encode::from_to($mesg, 'euc-cn', 'utf8');
+	print $log substr(localtime, 4, 16), $mesg;
 }
 
 sub hexdump {
@@ -598,6 +604,11 @@ sub login {
 	my @servers = $self->get_servers($proto);
 	my $login_packet;
    SVR: foreach my $svr (@servers) {
+		$self->mesg("Connecting to $proto server $svr...");
+		my $socket = $self->connect($proto, $svr, $proxy);
+		next SVR unless defined $socket;
+		$self->mesg("socket created...") if $self->{Debug};
+
 	   	unless ($login_packet) {
 			my $token = $self->get_login_token($svr, $proto, $proxy);
 			next SVR unless $token;
@@ -608,6 +619,7 @@ sub login {
 			$login_packet = undef;
 			next SVR;
 		}
+		$self->mesg("decrypted login resp: ", unpack("H*", $plain), "\n") if $self->{Debug};
 		my $login = ord($plain);
 		if ($login == 0) { # login successfull
 			$self->{Key} = substr($plain, 1, 0x10);
@@ -620,16 +632,20 @@ sub login {
 		} elsif ($login == 1) { # redirect to another server
 			$svr = $self->show_address(substr($plain, 5, 6));
 			($self->{SvrIP}, $self->{SvrPort}) = split(/:/, $svr);
-			$self->{Socket}->shutdown;
+			$self->{Socket} = undef;
 			$self->log_t("redirected to server $svr");
 			$self->mesg(" redirected.\n");
 			redo SVR;
-		} elsif ($login == 5) { # dont know what this is
+		} elsif ($login == 9 or $login == 5) { # wrong password
 			$self->mesg("$plain\nError code $login\n");
 			last SVR;
-		} elsif ($login == 9) { # Wrong password
-			$self->mesg("$plain\nError code $login\n");
-			last SVR;
+		} elsif ($login == 10) { # redirect to another server
+			$svr = $self->show_address(substr($plain, -4));
+			$self->mesg("redirected to server $svr (code $login).\n");
+			$self->{SvrIP} = $svr;
+			$self->{Socket} = undef;
+			$socket = undef;
+			redo SVR;
 		} else {
 			my $h = unpack("H*", $plain);
 			$self->mesg("failed with error code $login\n$h\n");
@@ -649,16 +665,15 @@ sub login {
 }
 
 sub get_login_token {
-	my ($self, $svr, $proto, $proxy) = @_;
-	$self->mesg("Connecting to $proto server $svr...");
-	my $socket = $self->connect($proto, $svr, $proxy);
+	my ($self) = @_;
+	my $socket = $self->{Socket};
 	return unless defined $socket;
 	$self->mesg("socket created...") if $self->{Debug};
 	my ($login_req, $resp);
 	foreach my $step (2) {
 		$login_req = $self->build_login_request_packet($step);
 		$socket->send($login_req);
-		$self->mesg("waiting for response $step...") if $self->{Debug};
+		$self->mesg("waiting for token $step...") if $self->{Debug};
 		$resp = $self->timed_recv(1024, 5);
 		if (defined $resp) {
 			$self->mesg("received...") if $self->{Debug};
@@ -667,13 +682,14 @@ sub get_login_token {
 			return;
 		}
 	}
-	#foreach (2, 3) {
+	#foreach (1 .. 8) {
 	#	$socket->send($login_req);
 	#}
 	my $token;
 	foreach my $r ($self->get_data($resp)) {
 		next unless substr($r, 3, 2) eq $CmdCode{login_request_2};
 		eval { $token = decrypt(undef, substr($r, 7, -1), $self->{RandKey2}) };
+		$self->mesg("token:", unpack("H*", $token)) if $self->{Debug};
 		return($token) if $token;
 	}
 
@@ -685,22 +701,36 @@ sub get_login_token {
 sub decrypt_login_response {
 	my ($self, $login_packet) = @_;
 	$self->{Socket}->send($login_packet);
-	$self->mesg("logging in ..");
-	my $resp = $self->timed_recv(1024, 5);
-	unless($resp) {
-		$self->mesg(" no response.\n");
-		return;
+	$self->mesg("login packet sent ...");
+	my $data;
+  RECV: while (1) {
+		my $resp = $self->timed_recv(4096, 5);
+		unless($resp) {
+			$self->mesg(" no response.\n");
+			return;
+		}
+		foreach my $d ($self->get_data($resp)) {
+			$self->mesg("\nServer response:", unpack("H*", $d), "\n") if $self->{Debug};
+			if (substr($d, 3, 2) eq "\x00\x22") {
+				$data = $d;
+				last RECV;
+			}
+		}
 	}
 	$self->{LastSvrAck} = time;
-	my ($data) = $self->get_data($resp);
-	return unless defined $data;
+	#my ($data) = $self->get_data($resp);
+	#return unless defined $data;
 	my $crypt = substr($data, 7, -1);
 	my $plain;
-	my @keys = length($crypt) == 24 ? qw(RandKey PWKey) : qw(PWKey RandKey);
+	$self->mesg("received ", length($crypt), " bytes...") if $self->{Debug};
+	my @keys = length($crypt) == 32 ? qw(RandKey PWKey) : qw(PWKey RandKey);
 	foreach my $key (@keys) {
-		eval { $plain = decrypt("", $crypt, $self->{$key}) };
-		return $plain if defined $plain;
-		$self->log_t($@) if $@ && $self->{Debug};
+		eval { $plain = decrypt(undef, $crypt, $self->{$key}) };
+		if (defined $plain) {
+			$self->mesg("decrypted with $key\n") if $self->{Debug};
+			return $plain;
+		}
+		$self->mesg("Failed to decrypt login response: $@") if $@ && $self->{Debug};
 	}
 	return undef;
 }

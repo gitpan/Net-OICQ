@@ -1,6 +1,6 @@
 package Net::OICQ::ServerEvent;
 
-# $Id: ServerEvent.pm,v 1.3 2007/06/11 04:37:44 tans Exp $
+# $Id: ServerEvent.pm,v 1.4 2007/06/15 18:09:53 tans Exp $
 
 # Copyright (c) 2003 - 2006 Shufeng Tan.  All rights reserved.
 # 
@@ -136,9 +136,9 @@ sub recv_msg {
 		$self->{MsgSeq} = $seq;
 		$self->{MsgTime} = $time;
 		if ($subtype == 0x81) { # Request for file transfer, voice or video
-			$mesg = unpack('H*', substr($plain, 54));
-			$self->{RequestId} = unpack('H*', substr($plain, 86, 2));
-			$self->{RequestIP} = $oicq->show_address(substr($plain, 88, 4));
+			#$mesg = unpack('H*', substr($plain, 54));
+			$self->{RequestId} = unpack('H*', substr($plain, 94, 2));
+			$self->{RequestIP} = $oicq->show_address(substr($plain, 96, 4));
 			if ($plain =~ /([^\x1f]+?)\x1f(\d+) \xd7\xd6\xbd\xda$/s) {
 				$self->{FileName} = $1;
 				$self->{FileSize} = $2;
@@ -150,11 +150,11 @@ sub recv_msg {
 				$self->{Ignore} = 1;
 			}
 		} elsif ($subtype == 0x85) { # Cancel
-			$mesg = unpack('H*', substr($plain, 54));
+			#$mesg = unpack('H*', substr($plain, 54));
 			$self->{RequestCancelled} = unpack('H*', substr($plain, 84, 2));
 		} elsif ($subtype == 0x35) {
 			$self->{Ignore} = 1;
-			$mesg = unpack('H*', substr($plain, 54));
+			#$mesg = unpack('H*', substr($plain, 54));
 		} elsif ($subtype == 0x0b) {
 			$mesg = substr($plain, 73);
 		} else {
@@ -214,7 +214,7 @@ sub recv_msg {
 	} elsif ($msg_type == 0x4c) {
 		$self->{MsgHeader} = unpack("H*", substr($plain, 20, 7));
 		$mesg = substr($plain, 27);
-	} else {
+	} elsif ($oicq->{Debug}) {
 		$mesg = unpack('H*', substr($plain, 20));
 		$oicq->log_t("Unknown message type $msg_type from $srcid, $srcaddr:\n$mesg");
 	}

@@ -1,6 +1,6 @@
 ---
 name: Net-OICQ
-version: 1.4
+version: 1.5
 author:
   - 'Shufeng Tan <shufengtan@gmail.com>'
 abstract: Perl extension for QQ instant messaging protocol
@@ -17,7 +17,7 @@ build_requires:
 provides:
   Net::OICQ:
     file: lib/Net/OICQ.pm
-    version: 1.4
+    version: 1.5
   Net::OICQ::ClientEvent:
     file: lib/Net/OICQ/ClientEvent.pm
   Net::OICQ::Event:
