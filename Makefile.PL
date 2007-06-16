@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 1.9 2007/02/08 04:35:32 tans Exp $
+# $Id: Makefile.PL,v 1.10 2007/06/16 13:58:03 tans Exp $
 
 # Copyright (c) 2002, 2003 Shufeng Tan.  All rights reserved.
 # 
@@ -25,6 +25,7 @@ WriteMakefile(
       (ABSTRACT_FROM => 'lib/Net/OICQ.pm', # retrieve abstract from module
        AUTHOR     => 'Shufeng Tan <shufengtan@gmail.com>') : ()),
     'LIBS'		=> [''],
+    'EXE_FILES'		=> ['bin/qq'],
     'DEFINE'		=> '',
     'INC'		=> '-I.',
 );

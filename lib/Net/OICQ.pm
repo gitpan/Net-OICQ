@@ -1,6 +1,6 @@
 package Net::OICQ;
 
-# $Id: OICQ.pm,v 1.17 2007/06/15 18:32:46 tans Exp $
+# $Id: OICQ.pm,v 1.19 2007/06/16 12:35:08 tans Exp $
 
 # Copyright (c) 2002 - 2007 Shufeng Tan.  All rights reserved.
 # 
@@ -22,7 +22,7 @@ use Encode;
 use Crypt::OICQ qw(encrypt decrypt);
 use Net::OICQ::ClientEvent;
 
-our $VERSION = '1.5';
+our $VERSION = '1.6';
 
 #################### Begin OICQ protocol data ######################
 
@@ -254,6 +254,7 @@ sub get_data {
 		return ();
 	}
 	my $len1 = unpack('n', substr($packet, 0, 2));
+	return () if $len1 == 0;  # TCP QQ packets must declare length in the beginning
 	if ($len1 <= $len) {
 		if (substr($packet, 2, 1) eq STX and substr($packet, $len1-1, 1) eq ETX) {
 			return(substr($packet, 2, $len1 - 2), get_data($self, substr($packet, $len1)));
@@ -971,22 +972,23 @@ sub send_group_msg {
 	my ($self, $group_id, @msg) = @_;
 	my $mesg = "@msg";
 	$self->log_t("Sent message to Group $group_id:\n", $mesg) if $self->{LogChat};
+	my $group_int_id = $self->group_int_id($group_id);
 	my @trunks = $self->split_gb_msg($mesg);
 	my $last_trunk = pop(@trunks);
 	foreach my $trunk (@trunks) {
 		my $data = "\0\1\1\0\x39\xe8\0\0\0\0$trunk";
 		$data = pack('n', length($data)) . $data;
-		$self->do_group('send_msg', $group_id, $data);
+		$self->do_group('send_msg', $group_int_id, $data);
 		sleep(1);
 	}
 	my $data = "\0\1\1\0\x39\xe8\0\0\0\0$last_trunk" . $self->msg_tail;
 	$data = pack('n', length($data)) . $data;
-	$self->do_group('send_msg', $group_id, $data);
+	$self->do_group('send_msg', $group_int_id, $data);
 }
 
 sub get_group_info {
 	my ($self, $group_id) = @_;
-	$self->do_group('get_info', $group_id, "");
+	$self->do_group('get_info', $self->group_int_id($group_id), "");
 }
 
 sub search_group {
@@ -996,7 +998,13 @@ sub search_group {
 
 sub group_online_members {
 	my ($self, $group_id) = @_;
-	$self->do_group('online_members', $group_id, "");
+	$self->do_group('online_members', $self->group_int_id($group_id), "");
+}
+
+sub group_int_id {
+	my ($self, $group_id) = @_;
+	$group_id += 202000000 if $group_id < 202000000;
+	return $group_id;
 }
 
 sub logout {
